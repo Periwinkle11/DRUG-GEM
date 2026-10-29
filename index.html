@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FTIR Drug Identifier AI</title>
+    <!-- Tailwind CSS for modern layout styling -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Plotly.js for rendering the interactive FTIR spectrum graph -->
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <style>
+        /* Red center stripe (~2cm height) */
+        .red-stripe {
+            position: fixed;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 75px;
+            background-color: #dc2626;
+            transform: translateY(-100%);
+            z-index: 0;
+            pointer-events: none;
+        }
+        /* Yellow center stripe (~2cm height) directly below red */
+        .yellow-stripe {
+            position: fixed;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 75px;
+            background-color: #eab308;
+            transform: translateY(0%);
+            z-index: 0;
+            pointer-events: none;
+        }
+        /* Explicit container box size to prevent graph overflow */
+        #chart-container {
+            position: relative;
+            width: 100%;
+            height: 320px;
+        }
+    </style>
+</head>
+<body class="bg-white text-slate-900 min-h-screen font-sans relative overflow-x-hidden">
+
+    <!-- Red & Yellow Background Stripes Accent -->
+    <div class="red-stripe"></div>
+    <div class="yellow-stripe"></div>
+
+    <!-- Main Outer Wrapper -->
+    <div class="relative z-10 min-h-screen flex flex-col justify-between">
+
+        <!-- Header Section (Dark Black with Professional Logo & Nav Buttons) -->
+        <header class="border-b border-neutral-800 bg-black text-white py-4 px-6 shadow-2xl">
+            <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+                
+                <!-- Professional Logo Branding (Icon + Larger Typography) -->
+                <div class="flex items-center gap-3">
+                    <div class="bg-neutral-900 border border-neutral-700 p-2 rounded-xl shadow-lg flex items-center justify-center">
+                        <svg class="w-8 h-8 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2l7 7-7 7-7-7 7-7z" fill="currentColor" fill-opacity="0.2"/>
+                            <path d="M5 12c0 5 3.5 8 8 9s8-4 8-9-3.5-8-8-8-8 3-8 8z" stroke="#14b8a6" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-black tracking-tight text-white flex items-center gap-2">
+                            DRUG <span class="text-purple-400 font-serif italic">GEM</span>
+                        </h1>
+                        <p class="text-xs text-neutral-400 tracking-wider">FTIR Spectrometer AI Module</p>
+                    </div>
+                </div>
+
+                <!-- Four Interactive Header Buttons -->
+                <div class="flex items-center gap-2 flex-wrap justify-center">
+                    <button onclick="openModal('historyModal')" class="px-3.5 py-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 rounded-lg text-xs font-semibold transition cursor-pointer shadow-sm">History</button>
+                    <button onclick="openModal('accuracyModal')" class="px-3.5 py-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 rounded-lg text-xs font-semibold transition cursor-pointer shadow-sm">Accuracy</button>
+                    <button onclick="openModal('rateModal')" class="px-3.5 py-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 rounded-lg text-xs font-semibold transition cursor-pointer shadow-sm">Rate Us</button>
+                    <button onclick="openModal('complaintModal')" class="px-3.5 py-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 rounded-lg text-xs font-semibold transition cursor-pointer shadow-sm">Complaint</button>
+                    <span class="text-xs bg-red-950/80 text-red-400 border border-red-800/80 px-3 py-1 rounded-full font-medium ml-2">System Online</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Grid Container -->
+        <main class="max-w-7xl w-full mx-auto p-6 space-y-8 my-auto">
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Left Column: Controls & Uploader (Dark Black Card) -->
+                <div class="space-y-6 lg:col-span-1">
+                    <div class="bg-black text-white border border-neutral-800 rounded-2xl p-6 shadow-2xl">
+                        <h2 class="text-lg font-semibold mb-2">Upload Spectrum File</h2>
+                        <p class="text-sm text-neutral-400 mb-4">Upload a `.jdx` or `.csv` file containing spectral data.</p>
+                        
+                        <!-- File Upload Box -->
+                        <label id="drop-zone" class="flex flex-col items-center justify-center border-2 border-dashed border-neutral-700 rounded-xl p-6 cursor-pointer hover:border-red-500 transition bg-neutral-900/85">
+                            <span class="text-3xl mb-2 pointer-events-none">📄</span>
+                            <span class="text-sm font-medium text-neutral-200 text-center pointer-events-none" id="file-label">Choose file or drag here</span>
+                            <span class="text-xs text-neutral-500 mt-1 pointer-events-none">.csv or .jdx formats</span>
+                            <input type="file" id="spectrum-file" class="hidden">
+                        </label>
+                        
+
+
+    
+
+
+                        <!-- Action Buttons: Vertically stacked -->
+                        <div class="flex flex-col gap-3 mt-5">
+                            <button onclick="processUploadedFile()" class="w-full bg-red-600 hover:bg-red-500 text-white font-semibold py-3 px-4 rounded-xl transition shadow-lg shadow-red-900/30 cursor-pointer">
+                                Run Analysis
+                            </button>
+                            <button onclick="clearAllData()" class="w-full bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-semibold py-3 px-4 rounded-xl transition border border-neutral-700 cursor-pointer">
+                                Clear File
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Interactive Spectrum Graph (Spans 2 columns) -->
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="bg-black text-white border border-neutral-800 rounded-2xl p-6 shadow-2xl min-w-0">
+                        <h2 class="text-lg font-semibold mb-3">FTIR Spectrum Waveform</h2>
+                        
+<div id="chart-container" class="relative w-full min-w-0 h-[480px] rounded-lg bg-neutral-950 text-neutral-500 text-sm overflow-hidden border border-neutral-900">
+                            <span id="chart-placeholder">Upload a file and click "Run Analysis" to plot data.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bottom Row: Results Prediction Card (Stretched across full width) -->
+                <div class="lg:col-span-3">
+                    <div class="bg-black text-white border border-neutral-800 rounded-2xl p-6 shadow-2xl">
+                        <h2 class="text-xl font-bold mb-4">Identification Results</h2>
+                        <div id="results-content" class="space-y-4">
+                            <p class="text-lg text-neutral-400 italic">No sample analyzed yet.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Extended Vertical Section: Advantages Photo Gallery with Banner -->
+            <div class="bg-black text-white border border-neutral-800 rounded-2xl p-8 shadow-2xl space-y-8">
+                <div class="text-center">
+                    <h2 class="text-2xl font-bold text-red-500">Why Use Drug Gem?</h2>
+                    <p class="text-neutral-400 text-sm mt-1">Discover the advantages of rapid home spectral drug identification.</p>
+                </div>
+
+                <!-- Upper Row: 3 Photos -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-lg">
+                        <img src="https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=600&q=80" alt="Home testing" class="w-full h-40 object-cover opacity-80 hover:opacity-100 transition">
+                        <div class="p-4">
+                            <h3 class="font-bold text-base text-emerald-400">Safe Home Screening</h3>
+                            <p class="text-xs text-neutral-400 mt-1">Perform initial pharmaceutical analysis from the comfort of your home without complex lab equipment.</p>
+                        </div>
+                    </div>
+                    <div class="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-lg">
+                        <img src="https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=600&q=80" alt="Instant results" class="w-full h-40 object-cover opacity-80 hover:opacity-100 transition">
+                        <div class="p-4">
+                            <h3 class="font-bold text-base text-emerald-400">Instant AI Matching</h3>
+                            <p class="text-xs text-neutral-400 mt-1">Advanced spectral peak evaluation yields compound identification in mere seconds.</p>
+                        </div>
+                    </div>
+                    <div class="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-lg">
+                        <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=600&q=80" alt="Accessible healthcare" class="w-full h-40 object-cover opacity-80 hover:opacity-100 transition">
+                        <div class="p-4">
+                            <h3 class="font-bold text-base text-emerald-400">Universal Accessibility</h3>
+                            <p class="text-xs text-neutral-400 mt-1">Designed for students, researchers, and households to verify medication components reliably.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Middle Banner Text -->
+                <div class="py-6 text-center border-y border-neutral-800 bg-neutral-950/50 rounded-xl">
+                    <h3 class="text-2xl font-serif italic font-bold tracking-wider text-yellow-400">made by cu students</h3>
+                </div>
+
+                <!-- Lower Row: 2 Photos -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+                    <div class="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-lg">
+                        <img src="https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=600&q=80" alt="Data security" class="w-full h-40 object-cover opacity-80 hover:opacity-100 transition">
+                        <div class="p-4">
+                            <h3 class="font-bold text-base text-emerald-400">Secure & Confidential</h3>
+                            <p class="text-xs text-neutral-400 mt-1">Your uploaded spectral files and historical queries remain private and stored safely locally.</p>
+                        </div>
+                    </div>
+                    <div class="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-lg">
+                        <img src="https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=600&q=80" alt="Precision analytics" class="w-full h-40 object-cover opacity-80 hover:opacity-100 transition">
+                        <div class="p-4">
+                            <h3 class="font-bold text-base text-emerald-400">High Precision Analytics</h3>
+                            <p class="text-xs text-neutral-400 mt-1">Robust baseline wavenumber parsing ensures dependable compound classification results.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+        <script>
+const API_URL = "http://127.0.0.1:5000";
+
+const fileInput = document.getElementById("spectrum-file");
+const fileLabel = document.getElementById("file-label");
+const results = document.getElementById("results-content");
+const chart = document.getElementById("chart-container");
+
+// Show selected filename
+fileInput.addEventListener("change", () => {
+    const file = fileInput.files[0];
+
+    fileLabel.textContent = file
+        ? file.name
+        : "Choose file or drag here";
+});
+
+// Run spectrum analysis
+async function processUploadedFile() {
+    const file = fileInput.files[0];
+
+    if (!file) {
+        alert("Please select a CSV spectrum file first.");
+        return;
+    }
+
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+        alert("Currently, only CSV files are supported.");
+        return;
+    }
+
+    results.innerHTML =
+        '<p class="text-yellow-400">Analyzing spectrum... Please wait.</p>';
+
+    try {
+        // Send the selected CSV to the Flask backend
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await fetch(`${API_URL}/predict`, {
+            method: "POST",
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.error || data.message || "Analysis failed."
+            );
+        }
+
+        // Display the backend response without inventing a prediction
+        const formattedResult = JSON.stringify(data, null, 2);
+
+        
+        // Display clean, user-friendly results
+        const matches = Array.isArray(data.top_matches)
+            ? data.top_matches
+            : [];
+
+        const score = Number(data.similarity_score);
+        const scoreAvailable = Number.isFinite(score);
+        const compoundName =
+            data.listed_chemical_form ||
+            data.predicted_reference_match ||
+            "No reliable match";
+
+        const otherMatches = matches.slice(1, 5).map(match => {
+            const matchScore = Number(match.similarity_score);
+
+            return `
+                <div class="flex justify-between items-center gap-4
+                            border-b border-neutral-700 py-3">
+                    <span class="text-neutral-200">
+                        ${escapeHTML(match.compound_name || "Unknown")}
+                    </span>
+                    <span class="text-neutral-400 text-sm">
+                        ${Number.isFinite(matchScore)
+                            ? matchScore.toFixed(2) + "%"
+                            : "N/A"}
+                    </span>
+                </div>
+            `;
+        }).join("");
+
+        results.innerHTML = `
+            <div class="bg-neutral-900 rounded-xl p-5 space-y-4">
+                <p class="text-xs uppercase tracking-widest text-neutral-400">
+                    Closest reference match
+                </p>
+
+                <h3 class="text-2xl font-bold text-white">
+                    ${escapeHTML(compoundName)}
+                </h3>
+
+                <div class="flex justify-between items-center gap-3">
+                    <span class="text-neutral-300">Spectral similarity</span>
+                    <span class="text-xl font-bold text-emerald-400">
+                        ${scoreAvailable ? score.toFixed(2) + "%" : "N/A"}
+                    </span>
+                </div>
+
+                <div class="w-full bg-neutral-700 rounded-full h-2">
+                    <div class="bg-emerald-500 h-2 rounded-full"
+                         style="width: ${scoreAvailable
+                            ? Math.max(0, Math.min(100, score))
+                            : 0}%">
+                    </div>
+                </div>
+
+                ${otherMatches ? `
+                    <div class="pt-3">
+                        <h4 class="font-semibold text-white mb-2">
+                            Other reference matches
+                        </h4>
+                        ${otherMatches}
+                    </div>
+                ` : ""}
+            </div>
+        `;
+
+        // Plot the uploaded spectrum
+        await plotCSV(file);
+
+    } catch (error) {
+        results.innerHTML = `
+            <div class="bg-neutral-900 rounded-xl p-5">
+                <h3 class="text-lg font-semibold text-red-400">
+                    Analysis could not be completed
+                </h3>
+                <p class="text-neutral-300 mt-2">
+                    ${escapeHTML(error.message)}
+                </p>
+                <p class="text-sm text-neutral-400 mt-2">
+                    Check the CSV format and make sure the backend is running.
+                </p>
+            </div>
+        `;
+    }
+}
+
+// Safely display text
+function escapeHTML(value) {
+    return String(value).replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+    })[char]);
+}
+
+// Plot the uploaded CSV spectrum
+async function plotCSV(file) {
+    const text = await file.text();
+    const lines = text.trim().split(/\r?\n/);
+
+    if (lines.length < 2) {
+        throw new Error("The CSV file has no spectrum data.");
+    }
+
+    const headers = lines[0].split(",").map(h =>
+        h.trim().replace(/^["']|["']$/g, "")
+    );
+
+    const xIndex = headers.indexOf("wavenumber_cm-1");
+    const yIndex = headers.indexOf("absorbance");
+
+    if (xIndex === -1 || yIndex === -1) {
+        throw new Error(
+            "CSV must contain wavenumber_cm-1 and absorbance columns."
+        );
+    }
+
+    const x = [];
+    const y = [];
+
+    for (const line of lines.slice(1)) {
+        if (!line.trim()) continue;
+
+        const columns = line.split(",");
+        const wavenumber = Number(columns[xIndex]?.trim());
+        const absorbance = Number(columns[yIndex]?.trim());
+
+        if (Number.isFinite(wavenumber) &&
+            Number.isFinite(absorbance)) {
+            x.push(wavenumber);
+            y.push(absorbance);
+        }
+    }
+
+    if (x.length < 2) {
+        throw new Error("Not enough valid spectrum points to draw a graph.");
+    }
+
+    chart.innerHTML = "";
+    chart.style.width = "100%";
+chart.style.height = "480px";
+chart.style.minHeight = "480px";
+chart.style.maxWidth = "100%";
+chart.style.overflow = "hidden";
+
+    await Plotly.newPlot(chart, [{
+        x,
+        y,
+        type: "scatter",
+        mode: "lines",
+        name: "Uploaded spectrum",
+        line: { color: "#38bdf8", width: 2 },
+        hovertemplate:
+            "Wavenumber: %{x}<br>Absorbance: %{y}<extra></extra>"
+    }], {
+        title: {
+            text: "Uploaded FTIR Spectrum",
+            font: { color: "#ffffff", size: 16 }
+        },
+        xaxis: {
+    title: "Wavenumber (cm⁻¹)",
+    autorange: "reversed",
+    automargin: true,
+    gridcolor: "#333333",
+    color: "#ffffff"
+},
+yaxis: {
+    title: "Absorbance",
+    automargin: true,
+    gridcolor: "#333333",
+    color: "#ffffff"
+},
+        paper_bgcolor: "#0a0a0a",
+        plot_bgcolor: "#0a0a0a",
+        font: { color: "#ffffff" },
+        autosize: true,
+        margin: { t: 60, r: 30, b: 80, l: 85 },
+    }, {
+        responsive: true,
+        displaylogo: false
+    });
+        requestAnimationFrame(() => {
+        Plotly.Plots.resize(chart);
+    });
+}
+
+// Clear selected file, graph and results
+function clearAllData() {
+    fileInput.value = "";
+    fileLabel.textContent = "Choose file or drag here";
+
+    chart.innerHTML =
+        '<span id="chart-placeholder">Upload a CSV file and click "Run Analysis" to plot data.</span>';
+
+    results.innerHTML =
+        '<p class="text-lg text-neutral-400 italic">No sample analyzed yet.</p>';
+}
+
+// Header buttons: these features are not implemented yet
+function openModal(modalId) {
+    alert("This feature is not available yet.");
+}
+</script>
+
+</body>
+</html>
